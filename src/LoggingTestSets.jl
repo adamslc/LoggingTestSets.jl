@@ -62,6 +62,28 @@ struct LoggingTestSet <: AbstractTestSet
     LoggingTestSet(args...; kw...) = new(DefaultTestSet(args...; kw...))
 end
 
+function log_failure(ts::LoggingTestSet, t::Fail)
+    str = "Test failed in testset $(ts.ts.description)"
+
+    @error(str,
+           Expression=t.orig_expr,
+           Evaluated=t.data,
+           exception=(DomainError(-1.0, "blah"), scrub_backtrace(backtrace())),
+           _file=string(t.source.file),
+           _line=t.source.line)
+
+    return
+end
+
+function log_failure(ts::LoggingTestSet, t::Error)
+    str = "Error during test in testset $(ts.ts.description)\n$(t.backtrace)"
+
+    @error(str, 
+           _file=string(t.source.file),
+           _line=t.source.line)
+
+    return
+end
 
 function Test.record(ts::LoggingTestSet, t::Union{Fail, Error})
 
@@ -79,7 +101,9 @@ function Test.record(ts::LoggingTestSet, t::Union{Fail, Error})
         end
     end
 
-    @error String(take!(io))
+    @error String(take!(io)) _file=string(t.source.file) _line=t.source.line
+
+    # log_failure(ts, t)
 
     push!(ts.ts.results, t)
 end
@@ -87,24 +111,7 @@ end
 Test.record(ts::LoggingTestSet, args...) = Test.record(ts.ts, args...)
 
 
-function Test.finish(ts::LoggingTestSet)
-
-    # Copied from: stdlib/Test/src/Test.jl https://git.io/JqZ70
-    np, nf, ne, nb, ncp, ncf, nce, ncb = Test.get_test_counts(ts.ts)
-    passes = np + ncp
-    fails  = nf + ncf
-    errors = ne + nce
-    broken = nb + ncb
-
-    @info "Test Summary: $(ts.ts.description)" passes fails errors broken
-
-    try
-        Test.finish(ts.ts)
-    catch err
-        @error err
-        rethrow(err)
-    end
-end
+Test.finish(ts::LoggingTestSet) = Test.finish(ts.ts)
 
 
 
